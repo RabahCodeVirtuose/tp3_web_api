@@ -206,3 +206,4 @@ http://localhost:8080/api/instructors
 
   - GET /api/courses?semester[gte]=3&credits[lte]=6&programs.id=1&mandatory=true
 
+je veux faire des essais 
