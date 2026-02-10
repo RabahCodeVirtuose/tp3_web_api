@@ -1,0 +1,22 @@
+services:
+  symfony:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      no_cache: true
+      args:
+        USERNAME: rabah # À modifier
+        USERID: 1000        # À modifier 
+        EMAIL: rabah.toubal@etu.univ-orleans.fr   # À modifier
+    container_name: wa-symfony
+    command: /bin/bash
+    tty: true
+    stdin_open: true
+    volumes:
+    - ./dev:/var/html/www
+    ports:
+    - 8080:8000
+    environment:
+      PS1: "[ $$(whoami) | \\w ] "
+
+

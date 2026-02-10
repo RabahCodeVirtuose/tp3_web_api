@@ -1,0 +1,208 @@
+le docker file doit ressembler à ça : 
+services:
+  symfony:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      no_cache: true
+      args:
+        USERNAME: rabah # À modifier
+        USERID: 1000        # À modifier
+        EMAIL: rabah.toubal@etu.univ-orleans.fr   # À modifier
+    container_name: wa-symfony
+    command: /bin/bash
+    tty: true
+    stdin_open: true
+    volumes:
+    - ./dev:/var/html/www
+    ports:
+    - 8080:8000
+    environment:
+      PS1: "[ $$(whoami) | \\w ] "
+
+
+
+
+# commandes docker à faire dès le début
+docker-compose build
+docker-compose up -d
+docker ps
+docker exec -ti my-good-container bash
+
+# dans le contenaire docker il faut exécuter ça
+symfony new academic_api --api
+cd academic_api
+
+# installer ce qu'il faut installer pour le faire fonctionner
+symfony composer require --dev symfony/maker-bundle
+
+# création d'entités
+symfony console make:entity Instructor
+symfony console make:entity Program
+symfony console make:entity Course
+symfony console make:entity Reference
+
+
+# générer la migrtion
+avant de la génréer il faut modifier le fichier .env
+symfony console make:migration
+symfony console doctrine:migrations:migrate
+
+# créer une fixture 
+symfony composer require --dev doctrine/doctrine-fixtures-bundle
+symfony composer require --dev fakerphp/faker
+symfony console make:fixture AppFixtures
+symfony console doctrine:fixtures:load
+symfony server:start --no-tls --listen-ip=0.0.0.0 --d
+
+# voici tout ce que j'ai rajouté dans la question 3 
+  - Instructors en lecture seule
+  - Accès aux sous‑collections en mode hiérarchique
+
+
+  1) Instructors en lecture seule
+  Fichier : dev/academic_api/src/Entity/Instructor.php
+  use ApiPlatform\Metadata\ApiResource;
+  use ApiPlatform\Metadata\Get;
+  use ApiPlatform\Metadata\GetCollection;
+
+  #[ApiResource(
+      operations: [
+          new GetCollection(),
+      ]
+  )]
+
+
+  2) Sous‑collections hiérarchiques (GetCollection + Link)
+
+  Course (dev/academic_api/src/Entity/Course.php)
+
+  use ApiPlatform\Metadata\GetCollection;
+
+  #[ApiResource]
+  #[ApiResource(
+      uriVariables: ['id' => new Link(fromClass: Program::class, toProperty: 'programs')],
+      operations: [new GetCollection()],
+  )]
+  #[ApiResource(
+      uriTemplate: '/instructors/{id}/courses',
+      uriVariables: ['id' => new Link(fromClass: Instructor::class, toProperty: 'instructors')],
+  )]
+  #[ApiResource(
+      uriTemplate: '/references/{id}/courses',
+      uriVariables: ['id' => new Link(fromClass: Reference::class, toProperty: 'references_a')],
+  )]
+  Program (dev/academic_api/src/Entity/Program.php)
+
+  use ApiPlatform\Metadata\ApiResource;
+  use ApiPlatform\Metadata\GetCollection;
+
+  #[ApiResource(
+      uriTemplate: '/courses/{id}/programs',
+      uriVariables: ['id' => new Link(fromClass: Course::class, toProperty: 'courses')],
+  )]
+  Instructor (dev/academic_api/src/Entity/Instructor.php)
+
+  use ApiPlatform\Metadata\Link;
+  use ApiPlatform\Metadata\GetCollection;
+  #[ApiResource(
+      uriTemplate: '/courses/{id}/instructors',
+      uriVariables: ['id' => new Link(fromClass: Course::class, toProperty: 'courses')],
+      operations: [new GetCollection()],
+  )]
+
+  Reference (dev/academic_api/src/Entity/Reference.php)
+
+  use ApiPlatform\Metadata\ApiResource;
+  use ApiPlatform\Metadata\GetCollection;
+  use ApiPlatform\Metadata\Link;
+
+  #[ApiResource]
+  #[ApiResource(
+      uriTemplate: '/courses/{id}/references',
+      uriVariables: ['id' => new Link(fromClass: Course::class, fromProperty: 'references_a')],
+      operations: [new GetCollection()],
+  )]
+
+  ———
+
+  3) Filtres sur les collections (Course)
+  Fichier : dev/academic_api/src/Entity/Course.php
+
+  Imports :
+
+  use ApiPlatform\Metadata\ApiFilter;
+  use ApiPlatform\Doctrine\Orm\Filter\RangeFilter;
+  use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+  use ApiPlatform\Doctrine\Orm\Filter\BooleanFilter;
+
+  Attributs :
+
+  #[ApiFilter(RangeFilter::class, properties: ['semester', 'credits', 'lectureHours', 'practicalHours', 'labHours'])]
+  #[ApiFilter(SearchFilter::class, properties: ['programs.id' => 'exact'])]
+  #[ApiFilter(BooleanFilter::class, properties: ['mandatory'])]
+
+  Exemples d’URL :
+
+  - /courses?semester[gte]=3
+  - /courses?credits[between]=3..6
+  - /courses?programs.id=2
+  - /courses?mandatory=true
+
+
+
+
+
+# exemples de requetes à envoyer pour voir vraiment si ça marche ou pas !
+ça doit renvoyer des 200 OK dans tout les test : 
+http://localhost:8080/api/docs
+http://localhost:8080/api/courses
+http://localhost:8080/api/programs
+http://localhost:8080/api/instructors
+http://localhost:8080/api/references
+
+pour tester la question 3 : 
+ça doit renvoyer 200 OK 
+http://localhost:8080/api/instructors/2 
+http://localhost:8080/api/instructors
+
+ça doit renvoyer une erreur 405 METHOD NOT ALLOWED 
+- POST /api/instructors
+    Body JSON :
+    → 405 Method Not Allowed
+    → 405 Method Not Allowed
+
+ça doit renvoyer aussi une erreur 405 METHOD NOT ALLOWED
+ - PATCH /api/instructors/{id}
+
+    {"position":"ASSISTANT"}
+
+    → 405 Method Not Allowed
+
+ça doit aussi renvoyer une erreur 405 METHOD NOT ALLOWED 
+ - DELETE /api/instructors/{id}
+    → 405 Method Not Allowed
+
+
+
+
+# tester les sous collections hiérarchiques
+  - GET /api/programs/{id}/courses
+  - GET /api/instructors/{id}/courses
+  - GET /api/references/{id}/courses
+  - GET /api/courses/{id}/programs
+  - GET /api/courses/{id}/instructors
+  - GET /api/courses/{id}/references
+
+# tester les filtres sur les collections
+ Filtres sur collections (Course)
+
+  - GET /api/courses?semester[gte]=3
+  - GET /api/courses?credits[between]=3..6
+  - GET /api/courses?programs.id=1
+  - GET /api/courses?mandatory=true
+
+  OK (combinaison)
+
+  - GET /api/courses?semester[gte]=3&credits[lte]=6&programs.id=1&mandatory=true
+
